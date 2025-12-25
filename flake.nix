@@ -31,18 +31,16 @@
 
         devShell = pkgs.mkShell {
           buildInputs = with pkgs; [
+            cairo
             cargo
             clippy
             desktop-file-utils
-            rust-analyzer
-            rustc
-            rustfmt
-            cairo
             gdk-pixbuf
             gobject-introspection
             graphene
             gtk4
             gtksourceview5
+            just
             libadwaita
             libxml2
             meson
@@ -52,6 +50,9 @@
             pango
             pkg-config
             polkit
+            rust-analyzer
+            rustc
+            rustfmt
             sqlite
             wrapGAppsHook4
             nixos-appstream-data.packages."${system}".nixos-appstream-data
