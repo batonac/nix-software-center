@@ -20,7 +20,7 @@ serde_yaml = "0.9"
 nix-editor = "0.3.0"
 nix-data = { git = "https://github.com/snowflakelinux/nix-data" }
 
-sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls" , "sqlite" ] }
+sqlx = { version = "0.7", features = [ "runtime-tokio-native-tls" , "sqlite" ] }
 
 html2pango = "0.5"
 log = "0.4"
