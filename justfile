@@ -11,10 +11,6 @@ update-lock:
     cargo update
     cargo generate-lockfile
 
-# Check outdated dependencies
-outdated:
-    cargo outdated
-
 # Update dependencies and rebuild
 update-build: update
     nix build
