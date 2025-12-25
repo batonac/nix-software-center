@@ -5,7 +5,6 @@
     flake-utils.url = "github:numtide/flake-utils";
     flake-utils-plus = {
       url = "github:snowfallorg/flake-utils-plus";
-      inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
     snowfall-lib = {
@@ -16,7 +15,7 @@
     nixos-appstream-data = {
       url = "path:./nixos-appstream-data";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils-plus.follows = "flake-utils-plus";
+      inputs.flake-utils.follows = "flake-utils";
     };
     nix-data = {
       url = "path:./nix-data";
