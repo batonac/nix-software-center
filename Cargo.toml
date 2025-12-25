@@ -38,3 +38,4 @@ anyhow = "1.0"
 [workspace]
 members = [".", "nsc-helper"]
 default-members = [".", "nsc-helper"]
+exclude = ["nix-data"]
