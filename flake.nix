@@ -2,11 +2,28 @@
   inputs = {
     self.submodules = true;
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    utils.url = "github:numtide/flake-utils";
+    flake-utils.url = "github:numtide/flake-utils";
+    flake-utils-plus = {
+      url = "github:snowfallorg/flake-utils-plus";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
+    snowfall-lib = {
+      url = "github:snowfallorg/lib";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils-plus.follows = "flake-utils-plus";
+    };
     nixos-appstream-data = {
       url = "path:./nixos-appstream-data";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.flake-utils.follows = "utils";
+      inputs.flake-utils-plus.follows = "flake-utils-plus";
+    };
+    nix-data = {
+      url = "path:./nix-data";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+      inputs.flake-utils-plus.follows = "flake-utils-plus";
+      inputs.snowfall-lib.follows = "snowfall-lib";
     };
   };
 
@@ -14,11 +31,11 @@
     {
       self,
       nixpkgs,
-      utils,
+      flake-utils,
       nixos-appstream-data,
       ...
     }:
-    utils.lib.eachDefaultSystem (
+    flake-utils.lib.eachDefaultSystem (
       system:
       let
         pkgs = import nixpkgs {
