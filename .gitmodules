@@ -1,3 +1,6 @@
 [submodule "nixos-appstream-data"]
 	path = nixos-appstream-data
 	url = https://github.com/batonac/nixos-appstream-data.git
+[submodule "nix-data"]
+	path = nix-data
+	url = https://github.com/batonac/nix-data
