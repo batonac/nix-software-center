@@ -10,21 +10,32 @@
     };
   };
 
-  outputs = { self, nixpkgs, utils, nixos-appstream-data, ... }:
-    utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      utils,
+      nixos-appstream-data,
+      ...
+    }:
+    utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = import nixpkgs {
           inherit system;
         };
       in
-      rec
-      {
-        packages = let
-          nix-software-center = pkgs.callPackage ./default.nix { inherit (nixos-appstream-data.packages."${system}") nixos-appstream-data; };
-        in {
-          inherit nix-software-center;
-          default = nix-software-center;
-        };
+      rec {
+        packages =
+          let
+            nix-software-center = pkgs.callPackage ./default.nix {
+              inherit (nixos-appstream-data.packages."${system}") nixos-appstream-data;
+            };
+          in
+          {
+            inherit nix-software-center;
+            default = nix-software-center;
+          };
 
         checks = self.packages.${system};
         hydraJobs = self.packages.${system};
@@ -59,7 +70,8 @@
           ];
           RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
         };
-      })
+      }
+    )
     // {
       overlays = {
         pkgs = final: prev: {
