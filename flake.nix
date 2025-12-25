@@ -1,9 +1,10 @@
 {
   inputs = {
+    self.submodules = true;
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     utils.url = "github:numtide/flake-utils";
     nixos-appstream-data = {
-      url = "github:korfuri/nixos-appstream-data/flake";
+      url = "path:./nixos-appstream-data";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "utils";
     };
