@@ -1091,7 +1091,7 @@ impl Component for PkgModel {
                     Some(Launch::GtkApp(l))
                 } else if self.installeduserpkgs.contains(&self.pkg) {
                     if let Ok(o) = Command::new("command").arg("-v").arg(&self.pname).output() {
-                        if o.success() {
+                        if o.status.success() {
                             Some(Launch::TerminalApp(self.pname.to_string()))
                         } else {
                             None
