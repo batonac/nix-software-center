@@ -1,14 +1,12 @@
 use crate::{
     config,
     parse::{
-        config::{editconfig, getconfig},
         packages::{AppData, LicenseEnum, PkgMaintainer, Platform},
         util,
     },
     ui::{
-        installedpage::InstalledItem, pkgpage::PkgPageInit, rebuild::RebuildMsg,
+        installedpage::InstalledItem, pkgpage::PkgPageInit,
         unavailabledialog::UnavailableDialogMsg, updatepage::UNAVAILABLE_BROKER,
-        welcome::WelcomeMsg,
     },
     APPINFO,
 };
@@ -39,16 +37,12 @@ use super::{
     installedpage::{InstalledPageModel, InstalledPageMsg},
     pkgpage::{self, InstallType, PkgInitModel, PkgModel, PkgMsg, WorkPkg},
     pkgtile::{PkgTile, PkgTileMsg},
-    preferencespage::{PreferencesPageModel, PreferencesPageMsg},
-    rebuild::RebuildModel,
     searchpage::{SearchItem, SearchPageModel, SearchPageMsg},
     unavailabledialog::UnavailableItemModel,
     updatepage::{UpdateItem, UpdatePageInit, UpdatePageModel, UpdatePageMsg, UpdateType},
-    welcome::WelcomeModel,
     windowloading::{LoadErrorModel, LoadErrorMsg, WindowAsyncHandler, WindowAsyncHandlerMsg},
 };
 
-pub static REBUILD_BROKER: MessageBroker<RebuildMsg> = MessageBroker::new();
 
 #[derive(PartialEq)]
 enum Page {
@@ -62,23 +56,9 @@ enum MainPage {
     CategoryPage,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum SystemPkgs {
-    Legacy,
-    Flake,
-    None,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum UserPkgs {
-    Env,
-    Profile,
-}
-
 #[tracker::track]
 pub struct AppModel {
     mainwindow: adw::ApplicationWindow,
-    config: NixDataConfig,
     #[tracker::no_eq]
     windowloading: WorkerController<WindowAsyncHandler>,
     #[tracker::no_eq]
@@ -86,22 +66,12 @@ pub struct AppModel {
     busy: bool,
     page: Page,
     mainpage: MainPage,
-    // #[tracker::no_eq]
-    // pkgs: HashMap<String, Package>,
-    // syspkgs: HashMap<String, String>,
-    // profilepkgs: Option<HashMap<String, String>>,
-    // pkgitems: HashMap<String, PkgItem>,
     #[tracker::no_eq]
     pkgdb: String,
     #[tracker::no_eq]
     nixpkgsdb: Option<String>,
-    #[tracker::no_eq]
-    systemdb: Option<String>,
     appdata: HashMap<String, AppData>,
     installeduserpkgs: HashMap<String, String>,
-    installedsystempkgs: HashSet<String>,
-    syspkgtype: SystemPkgs,
-    userpkgtype: UserPkgs,
     categoryrec: HashMap<PkgCategory, Vec<String>>,
     categoryall: HashMap<PkgCategory, Vec<String>>,
     #[tracker::no_eq]
@@ -121,32 +91,22 @@ pub struct AppModel {
     #[tracker::no_eq]
     aboutpage: Controller<AboutPageModel>,
     #[tracker::no_eq]
-    preferencespage: Controller<PreferencesPageModel>,
-    #[tracker::no_eq]
     installedpage: Controller<InstalledPageModel>,
     #[tracker::no_eq]
     updatepage: Controller<UpdatePageModel>,
     viewstack: adw::ViewStack,
     installedpagebusy: Vec<(String, InstallType)>,
-    #[tracker::no_eq]
-    rebuild: Controller<RebuildModel>,
-    #[tracker::no_eq]
-    welcomepage: Controller<WelcomeModel>,
     online: bool,
 }
 
 #[derive(Debug)]
 pub enum AppMsg {
-    UpdateSysconfig(Option<String>),
-    UpdateFlake(Option<String>, Option<String>),
     TryLoad,
     UpdateDB,
-    LoadConfig(NixDataConfig),
     Close,
     LoadError(String, String),
     Initialize(
         String,
-        Option<String>,
         Option<String>,
         HashMap<String, AppData>,
         Vec<String>,
@@ -156,10 +116,8 @@ pub enum AppMsg {
     OpenPkg(String),
     FrontPage,
     FrontFrontPage,
-    // UpdatePkgs(Option<Vec<String>>),
     UpdateInstalledPkgs,
     UpdateInstalledPage,
-    // UpdateUpdatePkgs,
     UpdateCategoryPkgs,
     SetSearch(bool),
     SetVsBar(bool),
@@ -382,7 +340,6 @@ impl Component for AppModel {
 
     menu! {
         mainmenu: {
-            "Preferences" => PreferencesAction,
             "About" => AboutAction,
         }
     }
@@ -412,80 +369,6 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let (config, welcome) = if let Some(config) = getconfig() {
-            debug!("Got config: {:?}", config);
-            let mut out = false;
-            if let Some(configpath) = &config.systemconfig {
-                if !Path::new(configpath).exists() {
-                    warn!("Invalid system config path: {}", configpath);
-                    out = true
-                }
-            }
-            if let Some(flakepath) = &config.flake {
-                if !Path::new(&flakepath).exists() {
-                    warn!("Invalid flake path: {}", flakepath);
-                    out = true
-                }
-            }
-            (config, out)
-        } else {
-            // Show welcome page
-            debug!("No config found");
-            (
-                NixDataConfig {
-                    systemconfig: None,
-                    flake: None,
-                    flakearg: None,
-                    generations: None,
-                },
-                true,
-            )
-        };
-
-        let userpkgtype = if let Ok(h) = std::env::var("HOME") {
-            if Path::new(&format!("{}/.nix-profile/manifest.json", h)).exists()
-                || !Path::new("/nix/var/nix/profiles/per-user/root/channels/nixos").exists()
-                || !Path::new(&format!("{}/.nix-profile/manifest.nix", h)).exists()
-                || if let Ok(m) = fs::read_to_string(&format!("{}/.nix-profile/manifest.nix", h)) {
-                    m == "[ ]"
-                } else {
-                    false
-                }
-            {
-                UserPkgs::Profile
-            } else {
-                UserPkgs::Env
-            }
-        } else {
-            UserPkgs::Env
-        };
-        let nixos = Path::new("/etc/NIXOS").exists();
-        let syspkgtype = if config.systemconfig.is_none() || !nixos {
-            SystemPkgs::None
-        } else {
-            match fs::read_to_string("/run/current-system/nixos-version") {
-                Ok(s) => {
-                    if !Path::new("/nix/var/nix/profiles/per-user/root/channels/nixos").exists()
-                        || config.flake.is_some()
-                    {
-                        SystemPkgs::Flake
-                    } else if let Some(last) = s.split('.').last() {
-                        if last.len() == 7 || last == "dirty" || last == "git" {
-                            SystemPkgs::Flake
-                        } else {
-                            SystemPkgs::Legacy
-                        }
-                    } else {
-                        SystemPkgs::Legacy
-                    }
-                }
-                Err(_) => SystemPkgs::None,
-            }
-        };
-
-        debug!("userpkgtype: {:?}", userpkgtype);
-        debug!("syspkgtype: {:?}", syspkgtype);
-
         let online = util::checkonline();
 
         let windowloading = WindowAsyncHandler::builder()
@@ -496,9 +379,6 @@ impl Component for AppModel {
             .forward(sender.input_sender(), identity);
         let pkgpage = PkgModel::builder()
             .launch(PkgPageInit {
-                userpkgs: userpkgtype.clone(),
-                syspkgs: syspkgtype.clone(),
-                config: config.clone(),
                 online,
             })
             .forward(sender.input_sender(), identity);
@@ -509,34 +389,21 @@ impl Component for AppModel {
             .launch(())
             .forward(sender.input_sender(), identity);
         let installedpage = InstalledPageModel::builder()
-            .launch((syspkgtype.clone(), userpkgtype.clone()))
+            .launch(())
             .forward(sender.input_sender(), identity);
         let updatepage = UpdatePageModel::builder()
             .launch(UpdatePageInit {
                 window: root.clone().upcast(),
-                systype: syspkgtype.clone(),
-                usertype: userpkgtype.clone(),
-                config: config.clone(),
                 online,
             })
             .forward(sender.input_sender(), identity);
-        let rebuild = RebuildModel::builder()
-            .launch_with_broker(root.clone().upcast(), &REBUILD_BROKER)
-            .forward(sender.input_sender(), identity);
         let viewstack = adw::ViewStack::new();
-        let welcomepage = WelcomeModel::builder()
-            .launch(root.clone().upcast())
-            .forward(sender.input_sender(), identity);
         let aboutpage = AboutPageModel::builder()
             .launch(root.clone().upcast())
             .detach();
-        let preferencespage = PreferencesPageModel::builder()
-            .launch(root.clone().upcast())
-            .forward(sender.input_sender(), identity);
 
         let model = AppModel {
             mainwindow: root.clone(),
-            config,
             windowloading,
             loaderrordialog,
             busy: true,
@@ -544,12 +411,8 @@ impl Component for AppModel {
             mainpage: MainPage::FrontPage,
             pkgdb: String::new(),
             nixpkgsdb: None,
-            systemdb: None,
             appdata: HashMap::new(),
             installeduserpkgs: HashMap::new(),
-            installedsystempkgs: HashSet::new(),
-            syspkgtype,
-            userpkgtype,
             categoryrec: HashMap::new(),
             categoryall: HashMap::new(),
             recommendedapps: FactoryVecDeque::builder().launch(gtk::FlowBox::new()).forward(sender.input_sender(), |output| match output {
@@ -569,10 +432,7 @@ impl Component for AppModel {
             updatepage,
             viewstack,
             installedpagebusy: vec![],
-            rebuild,
-            welcomepage,
             aboutpage,
-            preferencespage,
             online,
             tracker: 0,
         };
@@ -585,15 +445,8 @@ impl Component for AppModel {
 
         sender.input(AppMsg::SetDarkMode(adw::StyleManager::default().is_dark()));
 
-        if welcome && nixos {
-            model.welcomepage.emit(WelcomeMsg::Show);
-        } else {
-            model.windowloading.emit(WindowAsyncHandlerMsg::CheckCache(
-                model.syspkgtype.clone(),
-                model.userpkgtype.clone(),
-                model.config.clone(),
-            ));
-        }
+        model.windowloading.emit(WindowAsyncHandlerMsg::CheckCache());
+        
         let recbox = model.recommendedapps.widget();
         let categorybox = model.categories.widget();
         let viewstack = &model.viewstack;
@@ -608,18 +461,7 @@ impl Component for AppModel {
             })
         };
 
-        let prefernecespage: RelmAction<PreferencesAction> = {
-            let sender = model.preferencespage.sender().clone();
-            let preferencespage = model.preferencespage.widget().clone();
-            let config = model.config.clone();
-            RelmAction::new_stateless(move |_| {
-                sender.send(PreferencesPageMsg::Show(config.clone())).unwrap();
-                preferencespage.present();
-            })
-        };
-
         group.add_action(aboutpage);
-        group.add_action(prefernecespage);
         let actions = group.into_action_group();
         widgets
             .main_window
@@ -656,64 +498,10 @@ impl Component for AppModel {
         match msg {
             AppMsg::TryLoad => {
                 self.busy = true;
-                self.windowloading.emit(WindowAsyncHandlerMsg::CheckCache(
-                    self.syspkgtype.clone(),
-                    self.userpkgtype.clone(),
-                    self.config.clone(),
-                ));
+                self.windowloading.emit(WindowAsyncHandlerMsg::CheckCache());
             }
             AppMsg::UpdateDB => {
-                self.windowloading.emit(WindowAsyncHandlerMsg::UpdateDB(
-                    self.syspkgtype.clone(),
-                    self.userpkgtype.clone(),
-                ));
-            }
-            AppMsg::LoadConfig(config) => {
-                info!("AppMsg::LoadConfig");
-                self.config = config;
-                if let Err(e) = editconfig(self.config.clone()) {
-                    warn!("Error editing config: {}", e);
-                }
-                let nixos = Path::new("/etc/NIXOS").exists();
-                self.syspkgtype = if self.config.systemconfig.is_none() || !nixos {
-                    SystemPkgs::None
-                } else {
-                    match fs::read_to_string("/run/current-system/nixos-version") {
-                        Ok(s) => {
-                            if !Path::new("/nix/var/nix/profiles/per-user/root/channels/nixos")
-                                .exists()
-                                || self.config.flake.is_some()
-                            {
-                                SystemPkgs::Flake
-                            } else if let Some(last) = s.split('.').last() {
-                                if last.len() == 7 || last == "dirty" || last == "git" {
-                                    SystemPkgs::Flake
-                                } else {
-                                    SystemPkgs::Legacy
-                                }
-                            } else {
-                                SystemPkgs::Legacy
-                            }
-                        }
-                        Err(_) => SystemPkgs::None,
-                    }
-                };
-                self.pkgpage.emit(PkgMsg::UpdatePkgTypes(
-                    self.syspkgtype.clone(),
-                    self.userpkgtype.clone(),
-                ));
-                self.pkgpage.emit(PkgMsg::UpdateConfig(self.config.clone()));
-                self.updatepage.emit(UpdatePageMsg::UpdatePkgTypes(
-                    self.syspkgtype.clone(),
-                    self.userpkgtype.clone(),
-                ));
-                self.updatepage
-                    .emit(UpdatePageMsg::UpdateConfig(self.config.clone()));
-                self.windowloading.emit(WindowAsyncHandlerMsg::CheckCache(
-                    self.syspkgtype.clone(),
-                    self.userpkgtype.clone(),
-                    self.config.clone(),
-                ));
+                self.windowloading.emit(WindowAsyncHandlerMsg::UpdateDB());
             }
             AppMsg::Close => {
                 relm4::main_application().quit();
@@ -722,85 +510,9 @@ impl Component for AppModel {
                 self.busy = false;
                 self.loaderrordialog.emit(LoadErrorMsg::Show(msg, msg2));
             }
-            AppMsg::UpdateSysconfig(systemconfig) => {
-                self.config = NixDataConfig {
-                    systemconfig: systemconfig.clone(),
-                    flake: self.config.flake.clone(),
-                    flakearg: self.config.flakearg.clone(),
-                    generations: self.config.generations,
-                };
-                if editconfig(self.config.clone()).is_err() {
-                    warn!("Failed to update config");
-                }
-                let nixos = Path::new("/etc/NIXOS").exists();
-                if systemconfig.is_some() && nixos {
-                    if self.syspkgtype == SystemPkgs::None {
-                        if self.config.flake.is_some() {
-                            self.syspkgtype = SystemPkgs::Flake;
-                        } else {
-                            self.syspkgtype = SystemPkgs::Legacy;
-                        }
-                    }
-                } else {
-                    self.syspkgtype = SystemPkgs::None;
-                }
-
-                self.pkgpage.emit(PkgMsg::UpdateConfig(self.config.clone()));
-                self.updatepage
-                    .emit(UpdatePageMsg::UpdateConfig(self.config.clone()));
-                self.pkgpage.emit(PkgMsg::UpdatePkgTypes(
-                    self.syspkgtype.clone(),
-                    self.userpkgtype.clone(),
-                ));
-                self.updatepage.emit(UpdatePageMsg::UpdatePkgTypes(
-                    self.syspkgtype.clone(),
-                    self.userpkgtype.clone(),
-                ));
-                self.installedpage.emit(InstalledPageMsg::UpdatePkgTypes(
-                    self.syspkgtype.clone(),
-                    self.userpkgtype.clone(),
-                ));
-            }
-            AppMsg::UpdateFlake(flake, flakearg) => {
-                self.config = NixDataConfig {
-                    systemconfig: self.config.systemconfig.clone(),
-                    flake: flake.clone(),
-                    flakearg,
-                    generations: self.config.generations,
-                };
-                if editconfig(self.config.clone()).is_err() {
-                    warn!("Failed to update config");
-                }
-
-                let nixos = Path::new("/etc/NIXOS").exists();
-                if nixos {
-                    if flake.is_some() {
-                        self.syspkgtype = SystemPkgs::Flake;
-                    } else {
-                        self.syspkgtype = SystemPkgs::Legacy;
-                    }
-                }
-
-                self.pkgpage.emit(PkgMsg::UpdateConfig(self.config.clone()));
-                self.updatepage
-                    .emit(UpdatePageMsg::UpdateConfig(self.config.clone()));
-                self.pkgpage.emit(PkgMsg::UpdatePkgTypes(
-                    self.syspkgtype.clone(),
-                    self.userpkgtype.clone(),
-                ));
-                self.updatepage.emit(UpdatePageMsg::UpdatePkgTypes(
-                    self.syspkgtype.clone(),
-                    self.userpkgtype.clone(),
-                ));
-                self.installedpage.emit(InstalledPageMsg::UpdatePkgTypes(
-                    self.syspkgtype.clone(),
-                    self.userpkgtype.clone(),
-                ));
-            }
             AppMsg::Initialize(
                 pkgdb,
                 nixpkgsdb,
-                systemdb,
                 appdata,
                 recommendedapps,
                 categoryrec,
@@ -809,14 +521,10 @@ impl Component for AppModel {
                 info!("AppMsg::Initialize");
                 self.pkgdb = pkgdb;
                 self.nixpkgsdb = nixpkgsdb;
-                self.systemdb = systemdb;
                 self.appdata = appdata;
                 self.categoryrec = categoryrec;
                 self.categoryall = categoryall;
 
-                self.pkgpage.emit(PkgMsg::UpdateConfig(self.config.clone()));
-                self.updatepage
-                    .emit(UpdatePageMsg::UpdateConfig(self.config.clone()));
                 sender.input(AppMsg::UpdateRecPkgs(recommendedapps));
                 let mut cat_guard = self.categories.guard();
                 cat_guard.clear();
