@@ -99,7 +99,6 @@ pub enum CarouselPage {
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub enum InstallType {
     User,
-    System, // Kept for compatibility but System operations will fail
 }
 
 #[derive(Debug, PartialEq, Eq)]
