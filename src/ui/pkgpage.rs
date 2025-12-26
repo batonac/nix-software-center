@@ -29,14 +29,11 @@ use crate::ui::installworker::InstallAsyncHandlerMsg;
 
 use super::installworker::InstallAsyncHandler;
 use super::installworker::InstallAsyncHandlerInit;
-use super::window::SystemPkgs;
-use super::window::UserPkgs;
 use super::{screenshotfactory::ScreenshotItem, window::AppMsg};
 
 #[tracker::track]
 #[derive(Debug)]
 pub struct PkgModel {
-    config: NixDataConfig,
     name: String,
     pkg: String,
     pname: String,
@@ -51,17 +48,12 @@ pub struct PkgModel {
     maintainers: Vec<PkgMaintainer>,
     launchable: Option<Launch>,
 
-    syspkgtype: SystemPkgs,
-    userpkgtype: UserPkgs,
-
     #[tracker::no_eq]
     screenshots: FactoryVecDeque<ScreenshotItem>,
     #[tracker::no_eq]
     installworker: WorkerController<InstallAsyncHandler>,
     carpage: CarouselPage,
-    installtype: InstallType,
     installeduserpkgs: HashSet<String>,
-    installedsystempkgs: HashSet<String>,
 
     workqueue: HashSet<WorkPkg>,
     visible: bool,
@@ -107,7 +99,7 @@ pub enum CarouselPage {
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub enum InstallType {
     User,
-    System,
+    System, // Kept for compatibility but System operations will fail
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -123,7 +115,6 @@ pub struct PkgInitModel {
     pub name: String,
     pub pkg: String,
     pub installeduserpkgs: HashSet<String>,
-    pub installedsystempkgs: HashSet<String>,
     pub pname: String,
     pub summary: Option<String>,
     pub description: Option<String>,
@@ -139,8 +130,6 @@ pub struct PkgInitModel {
 
 #[derive(Debug)]
 pub enum PkgMsg {
-    UpdateConfig(NixDataConfig),
-    UpdatePkgTypes(SystemPkgs, UserPkgs),
     Open(Box<PkgInitModel>),
     LoadScreenshot(String, usize, String),
     SetError(String, usize),
@@ -149,8 +138,6 @@ pub enum PkgMsg {
     Close,
     InstallUser,
     RemoveUser,
-    InstallSystem,
-    RemoveSystem,
     Cancel,
     CancelFinished,
     FinishedProcess(WorkPkg),
@@ -158,7 +145,6 @@ pub enum PkgMsg {
     Launch,
     NixRun,
     NixShell,
-    SetInstallType(InstallType),
     AddToQueue(WorkPkg),
     UpdateOnline(bool)
 }
@@ -171,9 +157,6 @@ pub enum PkgAsyncMsg {
 
 #[derive(Debug)]
 pub struct PkgPageInit {
-    pub syspkgs: SystemPkgs,
-    pub userpkgs: UserPkgs,
-    pub config: NixDataConfig,
     pub online: bool
 }
 
@@ -1054,38 +1037,6 @@ impl Component for PkgModel {
         );
         let widgets = view_output!();
         widgets.userinstallstack.set_hhomogeneous(false);
-        widgets.systeminstallstack.set_hhomogeneous(false);
-
-        let mut group = RelmActionGroup::<ModeActionGroup>::new();
-        let nixenv: RelmAction<NixEnvAction> = {
-            let sender = sender.clone();
-            RelmAction::new_stateless(move |_| {
-                sender.input(PkgMsg::SetInstallType(InstallType::User));
-            })
-        };
-
-        let nixprofile: RelmAction<NixProfileAction> = {
-            let sender = sender.clone();
-            RelmAction::new_stateless(move |_| {
-                sender.input(PkgMsg::SetInstallType(InstallType::User));
-            })
-        };
-
-        let nixsystem: RelmAction<NixSystemAction> = {
-            let sender = sender.clone();
-            RelmAction::new_stateless(move |_| {
-                sender.input(PkgMsg::SetInstallType(InstallType::System));
-            })
-        };
-
-        group.add_action(nixenv);
-        group.add_action(nixprofile);
-        group.add_action(nixsystem);
-
-        let actions = group.into_action_group();
-        widgets
-            .pkg_window
-            .insert_action_group("mode", Some(&actions));
 
         let mut rungroup = RelmActionGroup::<RunActionGroup>::new();
         let launchaction: RelmAction<LaunchAction> = {
@@ -1116,15 +1067,6 @@ impl Component for PkgModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.reset();
         match msg {
-            PkgMsg::UpdateConfig(config) => {
-                self.config = config.clone();
-                self.installworker.emit(InstallAsyncHandlerMsg::SetConfig(config));
-            }
-            PkgMsg::UpdatePkgTypes(syspkgs, userpkgs) => {
-                self.syspkgtype = syspkgs.clone();
-                self.userpkgtype = userpkgs.clone();
-                self.installworker.emit(InstallAsyncHandlerMsg::SetPkgTypes(syspkgs, userpkgs));
-            }
             PkgMsg::Open(pkgmodel) => {
 
                 // First clean up from previous package
@@ -1145,19 +1087,12 @@ impl Component for PkgModel {
                 self.set_licenses(pkgmodel.licenses);
                 self.set_pname(pkgmodel.pname);
                 self.set_installeduserpkgs(pkgmodel.installeduserpkgs);
-                self.set_installedsystempkgs(pkgmodel.installedsystempkgs);
-
-                if self.installedsystempkgs.contains(&self.pkg) && !self.installeduserpkgs.contains(match self.userpkgtype { UserPkgs::Env => &self.pname, UserPkgs::Profile => &self.pkg }) {
-                    self.set_installtype(InstallType::System)
-                } else {
-                    self.set_installtype(InstallType::User)
-                }
 
                 self.launchable = if let Some(l) = pkgmodel.launchable {
                     Some(Launch::GtkApp(l))
-                } else if self.installeduserpkgs.contains(match self.userpkgtype { UserPkgs::Env => &self.pname, UserPkgs::Profile => &self.pkg }) {
+                } else if self.installeduserpkgs.contains(&self.pkg) {
                     if let Ok(o) = Command::new("command").arg("-v").arg(&self.pname).output() {
-                        if o.status.success() {
+                        if o.success() {
                             Some(Launch::TerminalApp(self.pname.to_string()))
                         } else {
                             None
@@ -1396,40 +1331,6 @@ impl Component for PkgModel {
                     self.installworker.emit(InstallAsyncHandlerMsg::Process(w));
                 }
             }
-            PkgMsg::InstallSystem => {
-                let online = util::checkonline();
-                if !online {
-                    sender.output(AppMsg::CheckNetwork);
-                    self.online = false;
-                    return;
-                }
-                let w = WorkPkg {
-                    pkg: self.pkg.to_string(),
-                    pname: self.pname.to_string(),
-                    pkgtype: InstallType::System,
-                    action: PkgAction::Install,
-                    block: false,
-                    notify: None,
-                };
-                self.workqueue.insert(w.clone());
-                if self.workqueue.len() == 1 {
-                    self.installworker.emit(InstallAsyncHandlerMsg::Process(w));
-                }
-            }
-            PkgMsg::RemoveSystem => {
-                let w = WorkPkg {
-                    pkg: self.pkg.to_string(),
-                    pname: self.pname.to_string(),
-                    pkgtype: InstallType::System,
-                    action: PkgAction::Remove,
-                    block: false,
-                    notify: None,
-                };
-                self.workqueue.insert(w.clone());
-                if self.workqueue.len() == 1 {
-                    self.installworker.emit(InstallAsyncHandlerMsg::Process(w));
-                }
-            }
             PkgMsg::FinishedProcess(work) => {
                 let _ = nix_data::utils::refreshicons();
                 self.workqueue.remove(&work);
@@ -1438,10 +1339,7 @@ impl Component for PkgModel {
                     InstallType::User => {
                         match work.action {
                             PkgAction::Install => {
-                                match self.userpkgtype {
-                                    UserPkgs::Env => self.installeduserpkgs.insert(work.pname.to_string()),
-                                    UserPkgs::Profile => self.installeduserpkgs.insert(work.pkg.to_string()),
-                                };
+                                self.installeduserpkgs.insert(work.pkg.to_string());
                                 if self.launchable.is_none() {
                                     if let Ok(o) = Command::new("command").arg("-v").arg(&self.pname).output() {
                                         if o.status.success() {
@@ -1451,29 +1349,13 @@ impl Component for PkgModel {
                                 }
                             }
                             PkgAction::Remove => {
-                                match self.userpkgtype {
-                                    UserPkgs::Env => self.installeduserpkgs.remove(&work.pname),
-                                    UserPkgs::Profile => self.installeduserpkgs.remove(&work.pkg),
-                                };
+                                self.installeduserpkgs.remove(&work.pkg);
                             }
                         }
                     }
                     InstallType::System => {
-                        match work.action {
-                            PkgAction::Install => {
-                                self.installedsystempkgs.insert(work.pkg.clone());
-                                if self.launchable.is_none() {
-                                    if let Ok(o) = Command::new("command").arg("-v").arg(&self.pname).output() {
-                                        if o.status.success() {
-                                            self.set_launchable(Some(Launch::TerminalApp(self.pname.to_string())))
-                                        }
-                                    }
-                                }
-                            }
-                            PkgAction::Remove => {
-                                self.installedsystempkgs.remove(&work.pkg);
-                            }
-                        }
+                        // System operations no longer supported
+                        warn!("System package operations are no longer supported");
                     }
                 }
                 sender.output(AppMsg::UpdateInstalledPkgs);
@@ -1612,9 +1494,6 @@ impl Component for PkgModel {
                     }
                 };
                 launchterm(&cmd);
-            }
-            PkgMsg::SetInstallType(t) => {
-                self.set_installtype(t);
             }
             PkgMsg::AddToQueue(work) => {
                 self.workqueue.insert(work.clone());
