@@ -446,7 +446,6 @@ impl Component for AppModel {
         sender.input(AppMsg::SetDarkMode(adw::StyleManager::default().is_dark()));
 
         model.windowloading.emit(WindowAsyncHandlerMsg::CheckCache());
-        
         let recbox = model.recommendedapps.widget();
         let categorybox = model.categories.widget();
         let viewstack = &model.viewstack;
