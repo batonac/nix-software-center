@@ -15,13 +15,7 @@ pub struct UpdatePageModel {
     #[tracker::no_eq]
     updateuserlist: FactoryVecDeque<UpdateItemModel>,
     #[tracker::no_eq]
-    updatesystemlist: FactoryVecDeque<UpdateItemModel>,
-    channelupdate: Option<(String, String)>,
-    #[tracker::no_eq]
     updateworker: WorkerController<UpdateAsyncHandler>,
-    config: NixDataConfig,
-    systype: SystemPkgs,
-    usertype: UserPkgs,
     updatetracker: u8,
     #[tracker::no_eq]
     unavailabledialog: Controller<UnavailableDialogModel>,
@@ -30,17 +24,11 @@ pub struct UpdatePageModel {
 
 #[derive(Debug)]
 pub enum UpdatePageMsg {
-    UpdateConfig(NixDataConfig),
-    UpdatePkgTypes(SystemPkgs, UserPkgs),
     Update(Vec<UpdateItem>, Vec<UpdateItem>),
     OpenRow(usize, InstallType),
-    UpdateSystem,
-    UpdateSystemRm(Vec<String>),
     UpdateAllUser,
     UpdateAllUserRm(Vec<String>),
     UpdateUser(String),
-    // UpdateChannels,
-    // UpdateSystemAndChannels,
     UpdateAll,
     UpdateAllRm(Vec<String>, Vec<String>),
     DoneWorking,
@@ -50,16 +38,11 @@ pub enum UpdatePageMsg {
 
 #[derive(Debug)]
 pub enum UpdateType {
-    System,
     User,
-    All,
 }
 
 pub struct UpdatePageInit {
     pub window: gtk::Window,
-    pub systype: SystemPkgs,
-    pub usertype: UserPkgs,
-    pub config: NixDataConfig,
     pub online: bool,
 }
 
@@ -219,32 +202,23 @@ impl SimpleComponent for UpdatePageModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let updateworker = UpdateAsyncHandler::builder()
-            .detach_worker(UpdateAsyncHandlerInit { syspkgs: initparams.systype.clone(), userpkgs: initparams.usertype.clone() })
+            .detach_worker(UpdateAsyncHandlerInit {})
             .forward(sender.input_sender(), identity);
 
         let unavailabledialog = UnavailableDialogModel::builder()
             .launch_with_broker(initparams.window.clone(), &UNAVAILABLE_BROKER)
             .forward(sender.input_sender(), identity);
 
-        let config = initparams.config;
-        updateworker.emit(UpdateAsyncHandlerMsg::UpdateConfig(config.clone()));
-
         let model = UpdatePageModel {
             updateuserlist: FactoryVecDeque::builder().launch(gtk::ListBox::new()).detach(),
-            updatesystemlist: FactoryVecDeque::builder().launch(gtk::ListBox::new()).detach(),
-            channelupdate: None,
             updatetracker: 0,
             updateworker,
-            config,
-            systype: initparams.systype,
-            usertype: initparams.usertype,
             unavailabledialog,
             online: initparams.online,
             tracker: 0,
         };
 
         let updateuserlist = model.updateuserlist.widget();
-        let updatesystemlist = model.updatesystemlist.widget();
 
         let widgets = view_output!();
         widgets.mainstack.set_hhomogeneous(false);
@@ -256,29 +230,14 @@ impl SimpleComponent for UpdatePageModel {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.reset();
         match msg {
-            UpdatePageMsg::UpdateConfig(config) => {
-                self.config = config;
-                self.updateworker.emit(UpdateAsyncHandlerMsg::UpdateConfig(self.config.clone()));
-            }
-            UpdatePageMsg::UpdatePkgTypes(systype, usertype) => {
-                self.systype = systype;
-                self.usertype = usertype;
-                self.updateworker.emit(UpdateAsyncHandlerMsg::UpdatePkgTypes(self.systype.clone(), self.usertype.clone()));
-            }
-            UpdatePageMsg::Update(updateuserlist, updatesystemlist) => {
+            UpdatePageMsg::Update(updateuserlist, _updatesystemlist) => {
                 info!("UpdatePageMsg::Update");
                 debug!("UPDATEUSERLIST: {:?}", updateuserlist);
-                debug!("UPDATESYSTEMLIST: {:?}", updatesystemlist);
                 self.update_updatetracker(|_| ());
                 let mut updateuserlist_guard = self.updateuserlist.guard();
                 updateuserlist_guard.clear();
                 for updateuser in updateuserlist {
                     updateuserlist_guard.push_back(updateuser);
-                }
-                let mut updatesystemlist_guard = self.updatesystemlist.guard();
-                updatesystemlist_guard.clear();
-                for updatesystem in updatesystemlist {
-                    updatesystemlist_guard.push_back(updatesystem);
                 }
             }
             UpdatePageMsg::OpenRow(row, pkgtype) => match pkgtype {
@@ -291,29 +250,9 @@ impl SimpleComponent for UpdatePageModel {
                     }
                 }
                 InstallType::System => {
-                    let updatesystemlist_guard = self.updatesystemlist.guard();
-                    if let Some(item) = updatesystemlist_guard.get(row) {
-                        if let Some(pkg) = &item.item.pkg {
-                            sender.output(AppMsg::OpenPkg(pkg.to_string()));
-                        }
-                    }
+                    // System operations no longer supported
                 }
             },
-            UpdatePageMsg::UpdateSystem => {
-                let online = util::checkonline();
-                if !online {
-                    sender.output(AppMsg::CheckNetwork);
-                    self.online = false;
-                    return;
-                }
-                let systype = self.systype.clone();
-                let systemconfig = self.config.systemconfig.clone();
-                let workersender = self.updateworker.sender().clone();
-                let output = sender.output_sender().clone();
-                REBUILD_BROKER.send(RebuildMsg::Show);
-                relm4::spawn(async move {
-                    let uninstallsys = match systype {
-                        SystemPkgs::Legacy => {
                             nix_data::cache::channel::unavailablepkgs(&[&systemconfig.unwrap()]).await.unwrap_or_default()
                         }
                         SystemPkgs::Flake => {
