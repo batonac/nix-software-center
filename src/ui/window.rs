@@ -33,12 +33,12 @@ use std::{
 
 use super::{
     about::{AboutPageModel, AboutPageMsg},
-    categories::{PkgCategory, PkgGroup},
+    categories::{PkgCategory, PkgCategoryMsg, PkgGroup},
     categorypage::{CategoryPageModel, CategoryPageMsg},
     categorytile::CategoryTile,
     installedpage::{InstalledPageModel, InstalledPageMsg},
     pkgpage::{self, InstallType, PkgInitModel, PkgModel, PkgMsg, WorkPkg},
-    pkgtile::PkgTile,
+    pkgtile::{PkgTile, PkgTileMsg},
     preferencespage::{PreferencesPageModel, PreferencesPageMsg},
     rebuild::RebuildModel,
     searchpage::{SearchItem, SearchPageModel, SearchPageMsg},
@@ -409,7 +409,7 @@ impl Component for AppModel {
     #[tokio::main]
     async fn init(
         _application: Self::Init,
-        root: &Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let (config, welcome) = if let Some(config) = getconfig() {
@@ -552,8 +552,12 @@ impl Component for AppModel {
             userpkgtype,
             categoryrec: HashMap::new(),
             categoryall: HashMap::new(),
-            recommendedapps: FactoryVecDeque::new(gtk::FlowBox::new(), sender.input_sender()),
-            categories: FactoryVecDeque::new(gtk::FlowBox::new(), sender.input_sender()),
+            recommendedapps: FactoryVecDeque::builder().launch(gtk::FlowBox::new()).forward(sender.input_sender(), |output| match output {
+                PkgTileMsg::Open(x) => AppMsg::OpenPkg(x),
+            }),
+            categories: FactoryVecDeque::builder().launch(gtk::FlowBox::new()).forward(sender.input_sender(), |output| match output {
+                PkgCategoryMsg::Open(x) => AppMsg::OpenCategoryPage(x),
+            }),
             pkgpage,
             searchpage,
             categorypage,

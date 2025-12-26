@@ -1,4 +1,4 @@
-use super::{categories::PkgCategory, categorytile::CategoryTile, window::*};
+use super::{categories::PkgCategory, categorytile::{CategoryTile, CategoryTileMsg}, window::*};
 use adw::prelude::*;
 use log::*;
 use relm4::{factory::*, *};
@@ -133,13 +133,17 @@ impl Component for CategoryPageModel {
 
     fn init(
         (): Self::Init,
-        root: &Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = CategoryPageModel {
             category: PkgCategory::Audio,
-            recommendedapps: FactoryVecDeque::new(gtk::FlowBox::new(), sender.input_sender()),
-            apps: FactoryVecDeque::new(gtk::FlowBox::new(), sender.input_sender()),
+            recommendedapps: FactoryVecDeque::builder().launch(gtk::FlowBox::new()).forward(sender.input_sender(), |output| match output {
+                CategoryTileMsg::Open(x) => CategoryPageMsg::OpenPkg(x),
+            }),
+            apps: FactoryVecDeque::builder().launch(gtk::FlowBox::new()).forward(sender.input_sender(), |output| match output {
+                CategoryTileMsg::Open(x) => CategoryPageMsg::OpenPkg(x),
+            }),
             busy: true,
             tracker: 0,
         };

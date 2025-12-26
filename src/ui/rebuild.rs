@@ -181,7 +181,7 @@ impl SimpleComponent for RebuildModel {
 
     fn init(
         parent_window: Self::Init,
-        root: &Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
 

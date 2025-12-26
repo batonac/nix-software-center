@@ -30,7 +30,6 @@ impl FactoryComponent for CategoryTile {
     type Input = ();
     type Output = CategoryTileMsg;
     type ParentWidget = gtk::FlowBox;
-    type ParentInput = CategoryPageMsg;
 
     view! {
         gtk::FlowBoxChild {
@@ -66,7 +65,7 @@ impl FactoryComponent for CategoryTile {
                 gtk::Button {
                     add_css_class: "card",
                     connect_clicked[sender, pkg = self.pkg.clone()] => move |_| {
-                        sender.output(CategoryTileMsg::Open(pkg.to_string()))
+                        let _ = sender.output(CategoryTileMsg::Open(pkg.to_string()));
                     },
                     set_can_focus: false,
                     gtk::Box {
@@ -173,11 +172,5 @@ impl FactoryComponent for CategoryTile {
             installeduser: parent.installeduser,
             installedsystem: parent.installedsystem,
         }
-    }
-
-    fn forward_to_parent(output: Self::Output) -> Option<CategoryPageMsg> {
-        Some(match output {
-            CategoryTileMsg::Open(x) => CategoryPageMsg::OpenPkg(x),
-        })
     }
 }

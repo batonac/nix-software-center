@@ -31,7 +31,6 @@ impl FactoryComponent for PkgGroup {
     type Input = ();
     type Output = PkgCategoryMsg;
     type ParentWidget = gtk::FlowBox;
-    type ParentInput = AppMsg;
 
     view! {
         gtk::FlowBoxChild {
@@ -77,7 +76,7 @@ impl FactoryComponent for PkgGroup {
                     }
                 },
                 connect_clicked[sender, category = self.category.clone()] => move |_| {
-                    sender.output(PkgCategoryMsg::Open(category.clone()));
+                    let _ = sender.output(PkgCategoryMsg::Open(category.clone()));
                 }
             }
         }
@@ -91,12 +90,6 @@ impl FactoryComponent for PkgGroup {
         Self {
             category: parent,
         }
-    }
-
-    fn forward_to_parent(output: Self::Output) -> Option<AppMsg> {
-        Some(match output {
-            PkgCategoryMsg::Open(x) => AppMsg::OpenCategoryPage(x),
-        })
     }
 
 }

@@ -94,12 +94,16 @@ impl SimpleComponent for InstalledPageModel {
 
     fn init(
         (systempkgtype, userpkgtype): Self::Init,
-        root: &Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = InstalledPageModel {
-            installeduserlist: FactoryVecDeque::new(gtk::ListBox::new(), sender.input_sender()),
-            installedsystemlist: FactoryVecDeque::new(gtk::ListBox::new(), sender.input_sender()),
+            installeduserlist: FactoryVecDeque::builder().launch(gtk::ListBox::new()).forward(sender.input_sender(), |output| match output {
+                InstalledItemMsg::Delete(item) => InstalledPageMsg::Remove(item),
+            }),
+            installedsystemlist: FactoryVecDeque::builder().launch(gtk::ListBox::new()).forward(sender.input_sender(), |output| match output {
+                InstalledItemMsg::Delete(item) => InstalledPageMsg::Remove(item),
+            }),
             updatetracker: 0,
             userpkgtype,
             systempkgtype,
@@ -229,7 +233,6 @@ impl FactoryComponent for InstalledItemModel {
     type Input = InstalledItemInputMsg;
     type Output = InstalledItemMsg;
     type ParentWidget = adw::gtk::ListBox;
-    type ParentInput = InstalledPageMsg;
 
     view! {
         adw::PreferencesRow {
@@ -321,7 +324,7 @@ impl FactoryComponent for InstalledItemModel {
                         set_can_focus: false,
                         connect_clicked[sender, item = self.item.clone()] => move |_| {
                             sender.input(InstalledItemInputMsg::Busy(true));
-                            sender.output(InstalledItemMsg::Delete(item.clone()))
+                            let _ = sender.output(InstalledItemMsg::Delete(item.clone()));
                         }
                     }
                 }
@@ -360,12 +363,6 @@ impl FactoryComponent for InstalledItemModel {
         Self {
             item,
         }
-    }
-
-    fn forward_to_parent(output: Self::Output) -> Option<InstalledPageMsg> {
-        Some(match output {
-            InstalledItemMsg::Delete(item) => InstalledPageMsg::Remove(item),
-        })
     }
 
     fn update(&mut self, msg: Self::Input, _sender: FactorySender<Self>) {

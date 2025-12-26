@@ -1,0 +1,35 @@
+this derivation will be built:
+  /nix/store/ncbi6yfmlczw2qjhlw7b3ljirs0pnl0w-nix-software-center-0.1.2.drv
+building '/nix/store/ncbi6yfmlczw2qjhlw7b3ljirs0pnl0w-nix-software-center-0.1.2.drv'...
+error: Cannot build '/nix/store/ncbi6yfmlczw2qjhlw7b3ljirs0pnl0w-nix-software-center-0.1.2.drv'.
+       Reason: builder failed with exit code 101.
+       Output paths:
+         /nix/store/w90s9zzfym1c9907lyl9razfhc0r1dkn-nix-software-center-0.1.2
+       Last 25 log lines:
+       >      = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+       >
+       > warning: variable does not need to be mutable
+       >     --> src/ui/pkgpage.rs:1344:33
+       >      |
+       > 1344 |                     if let Some(mut scrn_widget) = scrn_guard.get_mut(i) {
+       >      |                                 ----^^^^^^^^^^^
+       >      |                                 |
+       >      |                                 help: remove this `mut`
+       >
+       > warning: variable does not need to be mutable
+       >   --> src/ui/searchpage.rs:97:29
+       >    |
+       > 97 |                         let mut pkgitem = item.get_mut_item();
+       >    |                             ----^^^^^^^
+       >    |                             |
+       >    |                             help: remove this `mut`
+       >
+       > Some errors have detailed explanations: E0053, E0308, E0407, E0425, E0437, E0599.
+       > For more information about an error, try `rustc --explain E0053`.
+       > warning: `nix-software-center` (lib) generated 8 warnings
+       > error: could not compile `nix-software-center` (lib) due to 41 previous errors; 8 warnings emitted
+       > FAILED: [code=101] src/nix-software-center
+       > /nix/store/imad8dvhp77h0pjbckp6wvmnyhp8dpgg-coreutils-9.8/bin/env CARGO_HOME=/build/9dqjy5gfpp7k6kqfkxs9jnvbhaj0yd7f-source/build/cargo-home /nix/store/742kq790y4nd92s4l4arg7ij8h7is5ar-cargo-1.91.1/bin/cargo build --manifest-path /build/9dqjy5gfpp7k6kqfkxs9jnvbhaj0yd7f-source/Cargo.toml --target-dir /build/9dqjy5gfpp7k6kqfkxs9jnvbhaj0yd7f-source/build/src --release && cp src/release/nix-software-center src/nix-software-center
+       > ninja: build stopped: subcommand failed.
+       For full logs, run:
+         nix log /nix/store/ncbi6yfmlczw2qjhlw7b3ljirs0pnl0w-nix-software-center-0.1.2.drv

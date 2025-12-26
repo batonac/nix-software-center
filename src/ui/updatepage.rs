@@ -215,7 +215,7 @@ impl SimpleComponent for UpdatePageModel {
 
     fn init(
         initparams: Self::Init,
-        root: &Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let updateworker = UpdateAsyncHandler::builder()
@@ -230,8 +230,8 @@ impl SimpleComponent for UpdatePageModel {
         updateworker.emit(UpdateAsyncHandlerMsg::UpdateConfig(config.clone()));
 
         let model = UpdatePageModel {
-            updateuserlist: FactoryVecDeque::new(gtk::ListBox::new(), sender.input_sender()),
-            updatesystemlist: FactoryVecDeque::new(gtk::ListBox::new(), sender.input_sender()),
+            updateuserlist: FactoryVecDeque::builder().launch(gtk::ListBox::new()).detach(),
+            updatesystemlist: FactoryVecDeque::builder().launch(gtk::ListBox::new()).detach(),
             channelupdate: None,
             updatetracker: 0,
             updateworker,
@@ -450,7 +450,6 @@ impl FactoryComponent for UpdateItemModel {
     type Input = ();
     type Output = UpdateItemMsg;
     type ParentWidget = adw::gtk::ListBox;
-    type ParentInput = UpdatePageMsg;
 
     view! {
         adw::PreferencesRow {

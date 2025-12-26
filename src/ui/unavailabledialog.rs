@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use gtk::pango;
+use gtk::glib;
 use log::*;
 use relm4::{*, prelude::*, factory::*};
 use adw::prelude::*;
@@ -66,20 +67,20 @@ impl SimpleComponent for UnavailableDialogModel {
             add_response: ("continue", "Continue"),
             set_response_appearance: ("continue", adw::ResponseAppearance::Destructive),
             connect_close_request => |_| {
-                gtk::Inhibit(true)
+                glib::Propagation::Stop
             }
         }
     }
 
     fn init(
         parent_window: Self::Init,
-        root: &Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
 
         let model = UnavailableDialogModel {
-            unavailableuseritems: FactoryVecDeque::new(gtk::ListBox::new(), sender.input_sender()),
-            unavailablesysitems: FactoryVecDeque::new(gtk::ListBox::new(), sender.input_sender()),
+            unavailableuseritems: FactoryVecDeque::builder().launch(gtk::ListBox::new()).detach(),
+            unavailablesysitems: FactoryVecDeque::builder().launch(gtk::ListBox::new()).detach(),
             updatetype: UpdateType::All,
             hidden: true,
         };
@@ -166,7 +167,6 @@ impl FactoryComponent for UnavailableItemModel {
     type Input = ();
     type Output = UnavailableItemMsg;
     type ParentWidget = adw::gtk::ListBox;
-    type ParentInput = UnavailableDialogMsg;
 
     view! {
         adw::PreferencesRow {

@@ -553,7 +553,7 @@ impl SimpleComponent for LoadErrorModel {
 
     fn init(
         parent_window: Self::Init,
-        root: &Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = LoadErrorModel {

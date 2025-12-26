@@ -2,6 +2,7 @@ use std::path::{PathBuf, Path};
 use super::window::AppMsg;
 use adw::prelude::*;
 use nix_data::config::configfile::NixDataConfig;
+use gtk::glib;
 use relm4::*;
 use relm4_components::open_dialog::*;
 
@@ -95,7 +96,7 @@ impl SimpleComponent for PreferencesPageModel {
                                     sender.input(PreferencesPageMsg::SetFlakePath(None));
                                     sender.input(PreferencesPageMsg::SetFlakeArg(None));
                                 }
-                                gtk::Inhibit(false)
+                                glib::Propagation::Proceed
                             } @switched,
                             #[track(model.changed(PreferencesPageModel::flake()))]
                             #[block_signal(switched)]
@@ -174,18 +175,18 @@ impl SimpleComponent for PreferencesPageModel {
 
     fn init(
         parent_window: Self::Init,
-        root: &Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let open_dialog = OpenDialog::builder()
-            .transient_for_native(root)
+            .transient_for_native(&root)
             .launch(OpenDialogSettings::default())
             .forward(sender.input_sender(), |response| match response {
                 OpenDialogResponse::Accept(path) => PreferencesPageMsg::SetConfigPath(Some(path)),
                 OpenDialogResponse::Cancel => PreferencesPageMsg::Ignore,
             });
         let flake_file_dialog = OpenDialog::builder()
-            .transient_for_native(root)
+            .transient_for_native(&root)
             .launch(OpenDialogSettings::default())
             .forward(sender.input_sender(), |response| match response {
                 OpenDialogResponse::Accept(path) => PreferencesPageMsg::SetFlakePath(Some(path)),

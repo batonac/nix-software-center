@@ -1007,7 +1007,7 @@ impl Component for PkgModel {
 
     fn init(
         initparams: Self::Init,
-        root: &Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let installworker = InstallAsyncHandler::builder()
@@ -1026,7 +1026,7 @@ impl Component for PkgModel {
             icon: None,
             homepage: None,
             licenses: vec![],
-            screenshots: FactoryVecDeque::new(adw::Carousel::new(), sender.input_sender()),
+            screenshots: FactoryVecDeque::builder().launch(adw::Carousel::new()).detach(),
             installworker,
             platforms: vec![],
             carpage: CarouselPage::Single,

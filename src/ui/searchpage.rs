@@ -51,11 +51,11 @@ impl SimpleComponent for SearchPageModel {
 
     fn init(
         (): Self::Init,
-        root: &Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = SearchPageModel {
-            searchitems: FactoryVecDeque::new(gtk::ListBox::new(), sender.input_sender()),
+            searchitems: FactoryVecDeque::builder().launch(gtk::ListBox::new()).detach(),
             searchitemtracker: 0,
             tracker: 0,
         };
@@ -132,7 +132,6 @@ impl FactoryComponent for SearchItemModel {
     type Input = ();
     type Output = SearchItemMsg;
     type ParentWidget = adw::gtk::ListBox;
-    type ParentInput = SearchPageMsg;
 
     view! {
         adw::PreferencesRow {

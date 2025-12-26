@@ -19,7 +19,6 @@ impl FactoryComponent for ScreenshotItem {
     type Input = ();
     type Output = ScreenshotItemMsg;
     type ParentWidget = adw::Carousel;
-    type ParentInput = PkgMsg;
 
     view! {
         gtk::Box {
