@@ -883,7 +883,6 @@ FROM pkgs JOIN meta ON (pkgs.attribute = meta.attribute) WHERE pkgs.attribute = 
                             licenses,
                             maintainers,
                             installeduserpkgs: self.installeduserpkgs.keys().cloned().collect(),
-                            installedsystempkgs: self.installedsystempkgs.clone(),
                             launchable,
                         };
                         self.page = Page::PkgPage;
@@ -1058,15 +1057,11 @@ FROM pkgs JOIN meta ON (pkgs.attribute = meta.attribute) WHERE pkgs.attribute = 
                 self.viewstack.set_visible_child_name("search");
                 self.set_searchquery(search.to_string());
                 let installeduserpkgs = self.installeduserpkgs.clone();
-                let installedsystempkgs = self.installedsystempkgs.clone();
-                let userpkgtype = self.userpkgtype.clone();
                 let pkgdb = self.pkgdb.clone();
                 let appdata = self.appdata.clone();
                 sender.command(move |out, shutdown| {
                     let search = search.clone();
                     let installeduserpkgs = installeduserpkgs.clone();
-                    let installedsystempkgs = installedsystempkgs;
-                    let userpkgtype = userpkgtype.clone();
                     shutdown.register(async move {
                         let searchsplit: Vec<String> = search.split(' ').filter(|x| x.len() > 1).map(|x| x.to_string()).collect();
                         warn!("Searchsplit: {:?}", searchsplit);
@@ -1107,11 +1102,8 @@ FROM pkgs JOIN meta ON (pkgs.attribute = meta.attribute) WHERE pkgs.attribute = 
                                             .as_ref()
                                             .and_then(|x| x.cached.as_ref())
                                             .map(|x| x[0].name.clone()),
-                                        installeduser: match userpkgtype {
-                                          UserPkgs::Env => installeduserpkgs.contains_key(&pname),
-                                          UserPkgs::Profile => installeduserpkgs.contains_key(&attr)
-                                        },
-                                        installedsystem: installedsystempkgs.contains(&attr),
+                                        installeduser: installeduserpkgs.contains_key(&attr),
+                                        installedsystem: false,
                                     })
                                 } else {
                                     outpkgs.push(SearchItem {
@@ -1120,11 +1112,8 @@ FROM pkgs JOIN meta ON (pkgs.attribute = meta.attribute) WHERE pkgs.attribute = 
                                         name: pname.to_string(),
                                         summary: if desc.is_empty() { None } else { Some(desc) },
                                         icon: None,
-                                        installeduser: match userpkgtype {
-                                          UserPkgs::Env => installeduserpkgs.contains_key(&pname),
-                                          UserPkgs::Profile => installeduserpkgs.contains_key(&attr)
-                                        },
-                                        installedsystem: installedsystempkgs.contains(&attr),
+                                        installeduser: installeduserpkgs.contains_key(&attr),
+                                        installedsystem: false,
                                     });
                                 }
                                 if i >= 200 {
@@ -1480,13 +1469,11 @@ FROM pkgs JOIN meta ON (pkgs.attribute = meta.attribute) WHERE pkgs.attribute = 
                 sender.input(AppMsg::UpdateInstalledPkgs);
                 info!("DONE AppAsyncMsg::UpdateRecPkgs");
             }
-            AppAsyncMsg::UpdateInstalledPkgs(installedsystempkgs, installeduserpkgs) => {
+            AppAsyncMsg::UpdateInstalledPkgs(_installedsystempkgs, installeduserpkgs) => {
                 info!("AppAsyncMsg::UpdateInstalledPkgs");
-                if installedsystempkgs != self.installedsystempkgs
-                    || installeduserpkgs != self.installeduserpkgs
+                if installeduserpkgs != self.installeduserpkgs
                 {
                     warn!("Changes needed!");
-                    self.installedsystempkgs = installedsystempkgs;
                     self.installeduserpkgs = installeduserpkgs;
                     sender.input(AppMsg::UpdateInstalledPage);
                     debug!("Getting recommended apps guard");
@@ -1494,17 +1481,13 @@ FROM pkgs JOIN meta ON (pkgs.attribute = meta.attribute) WHERE pkgs.attribute = 
                     debug!("Got recommended apps guard");
                     for item in recommendedapps_guard.iter_mut() {
                         debug!("Got item {}", item.pkg);
-                        item.installeduser =
-                            self.installeduserpkgs.contains_key(match self.userpkgtype {
-                                UserPkgs::Env => &item.pname,
-                                UserPkgs::Profile => &item.pkg,
-                            });
-                        item.installedsystem = self.installedsystempkgs.contains(&item.pkg);
+                        item.installeduser = self.installeduserpkgs.contains_key(&item.pkg);
+                        item.installedsystem = false;
                     }
                     if self.searching {
                         self.searchpage.emit(SearchPageMsg::UpdateInstalled(
                             self.installeduserpkgs.keys().cloned().collect(),
-                            self.installedsystempkgs.clone(),
+                            HashSet::new(),
                         ));
                     }
                 }
