@@ -926,22 +926,22 @@ FROM pkgs JOIN meta ON (pkgs.attribute = meta.attribute) WHERE pkgs.attribute = 
                 if let Ok(pool) = &SqlitePool::connect(&format!("sqlite://{}", self.pkgdb)).await {
                     for installedpkg in self.installeduserpkgs.keys() {
                         debug!("Checking package {}", installedpkg);
-                        let pkgdata: sqlx::Result<(String, String)> = sqlx::query_as(
+                        let pkg_query_result: sqlx::Result<(String, String)> = sqlx::query_as(
                             "SELECT pname, version FROM pkgs WHERE attribute = $1",
                         )
                         .bind(installedpkg)
                         .fetch_one(pool)
                         .await;
                         
-                        if let Ok((pname, version)) = pkgdata {
-                            let desc: sqlx::Result<(String,)> = sqlx::query_as(
+                        if let Ok((pname, version)) = pkg_query_result {
+                            let description_result: sqlx::Result<(String,)> = sqlx::query_as(
                                 "SELECT description FROM meta WHERE attribute = $1",
                             )
                             .bind(installedpkg)
                             .fetch_one(pool)
                             .await;
                             
-                            let description = desc.map(|(d,)| d).unwrap_or_default();
+                            let description = description_result.map(|(d,)| d).unwrap_or_default();
                             let mut name = pname.to_string();
                             let mut summary = if description.is_empty() {
                                 None
@@ -981,14 +981,14 @@ FROM pkgs JOIN meta ON (pkgs.attribute = meta.attribute) WHERE pkgs.attribute = 
                                 if let Ok(latestpool) =
                                     &SqlitePool::connect(&format!("sqlite://{}", latest)).await
                                 {
-                                    let newverdata: sqlx::Result<(String,)> = sqlx::query_as(
+                                    let new_version_result: sqlx::Result<(String,)> = sqlx::query_as(
                                         "SELECT version FROM pkgs WHERE attribute = $1",
                                     )
                                     .bind(installedpkg)
                                     .fetch_one(latestpool)
                                     .await;
                                     
-                                    if let Ok((newver,)) = newverdata {
+                                    if let Ok((newver,)) = new_version_result {
                                         debug!("PROFILE: {} {} {}", installedpkg, version, newver);
                                         if version != newver {
                                             updateuseritems.push(UpdateItem {
