@@ -1,11 +1,8 @@
 use super::window::AppMsg;
-use super::window::SystemPkgs;
 use crate::parse::packages::appsteamdata;
 use crate::parse::packages::AppData;
 use crate::ui::categories::PkgCategory;
-use crate::ui::window::UserPkgs;
 use log::*;
-use nix_data::config::configfile::NixDataConfig;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
 use relm4::adw::prelude::*;
@@ -18,8 +15,8 @@ pub struct WindowAsyncHandler;
 
 #[derive(Debug)]
 pub enum WindowAsyncHandlerMsg {
-    CheckCache(SystemPkgs, UserPkgs, NixDataConfig),
-    UpdateDB(SystemPkgs, UserPkgs),
+    CheckCache(),
+    UpdateDB(),
 }
 
 impl Worker for WindowAsyncHandler {
@@ -33,7 +30,7 @@ impl Worker for WindowAsyncHandler {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
-            WindowAsyncHandlerMsg::CheckCache(syspkgs, userpkgs, _config) => {
+            WindowAsyncHandlerMsg::CheckCache() => {
                 info!("WindowAsyncHandlerMsg::CheckCache");
                 relm4::spawn(async move {
                     let mut recpicks = vec![];
@@ -80,33 +77,10 @@ impl Worker for WindowAsyncHandler {
                         }
                     };
 
-                    let nixpkgsdb = match userpkgs {
-                        UserPkgs::Profile => {
-                            if let Ok(x) = nix_data::cache::profile::nixpkgslatest().await {
-                                Some(x)
-                            } else {
-                                None
-                            }
-                        }
-                        UserPkgs::Env => None,
-                    };
-
-                    let systemdb = match syspkgs {
-                        SystemPkgs::None => None,
-                        SystemPkgs::Legacy => {
-                            if let Ok(x) = nix_data::cache::channel::legacypkgs().await {
-                                Some(x)
-                            } else {
-                                None
-                            }
-                        }
-                        SystemPkgs::Flake => {
-                            if let Ok(x) = nix_data::cache::flakes::flakespkgs().await {
-                                Some(x)
-                            } else {
-                                None
-                            }
-                        }
+                    let nixpkgsdb = if let Ok(x) = nix_data::cache::profile::nixpkgslatest().await {
+                        Some(x)
+                    } else {
+                        None
                     };
 
                     let pkglist: Vec<(String,)> = match sqlx::query_as("SELECT attribute FROM pkgs")
@@ -438,11 +412,11 @@ impl Worker for WindowAsyncHandler {
                     recpicks.shuffle(&mut rng);
 
                     sender.output(AppMsg::Initialize(
-                        pkgdb, nixpkgsdb, systemdb, appdata, recpicks, catpicks, catpkgs,
+                        pkgdb, nixpkgsdb, appdata, recpicks, catpicks, catpkgs,
                     ));
                 });
             }
-            WindowAsyncHandlerMsg::UpdateDB(syspkgs, userpkgs) => {
+            WindowAsyncHandlerMsg::UpdateDB() => {
                 relm4::spawn(async move {
                     let nixos = Path::new("/etc/NIXOS").exists();
 
@@ -472,33 +446,10 @@ impl Worker for WindowAsyncHandler {
                         }
                     };
 
-                    let _nixpkgsdb = match userpkgs {
-                        UserPkgs::Profile => {
-                            if let Ok(x) = nix_data::cache::profile::nixpkgslatest().await {
-                                Some(x)
-                            } else {
-                                None
-                            }
-                        }
-                        UserPkgs::Env => None,
-                    };
-
-                    let _systemdb = match syspkgs {
-                        SystemPkgs::None => None,
-                        SystemPkgs::Legacy => {
-                            if let Ok(x) = nix_data::cache::channel::legacypkgs().await {
-                                Some(x)
-                            } else {
-                                None
-                            }
-                        }
-                        SystemPkgs::Flake => {
-                            if let Ok(x) = nix_data::cache::flakes::flakespkgs().await {
-                                Some(x)
-                            } else {
-                                None
-                            }
-                        }
+                    let _nixpkgsdb = if let Ok(x) = nix_data::cache::profile::nixpkgslatest().await {
+                        Some(x)
+                    } else {
+                        None
                     };
                 });
             }
