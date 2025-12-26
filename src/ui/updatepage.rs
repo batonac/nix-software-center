@@ -1,10 +1,9 @@
 use crate::{APPINFO, ui::unavailabledialog::UnavailableDialogModel, parse::util};
 
-use super::{pkgpage::InstallType, window::*, updateworker::{UpdateAsyncHandler, UpdateAsyncHandlerMsg, UpdateAsyncHandlerInit}, rebuild::RebuildMsg, unavailabledialog::UnavailableDialogMsg};
+use super::{pkgpage::InstallType, window::*, updateworker::{UpdateAsyncHandler, UpdateAsyncHandlerMsg, UpdateAsyncHandlerInit}, unavailabledialog::UnavailableDialogMsg};
 use adw::prelude::*;
-use nix_data::config::configfile::NixDataConfig;
 use relm4::{factory::*, gtk::pango, *};
-use std::{path::Path, convert::identity, collections::HashMap};
+use std::{convert::identity, collections::HashMap};
 use log::*;
 
 pub static UNAVAILABLE_BROKER: MessageBroker<UnavailableDialogMsg> = MessageBroker::new();
@@ -29,8 +28,6 @@ pub enum UpdatePageMsg {
     UpdateAllUser,
     UpdateAllUserRm(Vec<String>),
     UpdateUser(String),
-    UpdateAll,
-    UpdateAllRm(Vec<String>, Vec<String>),
     DoneWorking,
     FailedWorking,
     UpdateOnline(bool),
@@ -76,7 +73,7 @@ impl SimpleComponent for UpdatePageModel {
                             }
                         }
                     }
-                } else if model.channelupdate.is_some() || !model.updateuserlist.is_empty() || !model.updatesystemlist.is_empty() {
+                } else if !model.updateuserlist.is_empty() {
                     gtk::Box {
                         set_orientation: gtk::Orientation::Vertical,
                         set_valign: gtk::Align::Start,
@@ -95,9 +92,9 @@ impl SimpleComponent for UpdatePageModel {
                                 set_halign: gtk::Align::End,
                                 set_valign: gtk::Align::Center,
                                 set_hexpand: true,
-                                set_label: "Update Everything",
+                                set_label: "Update All User Packages",
                                 connect_clicked[sender] => move |_| {
-                                    sender.input(UpdatePageMsg::UpdateAll);
+                                    sender.input(UpdatePageMsg::UpdateAllUser);
                                 }
                             }
                         },
@@ -109,11 +106,7 @@ impl SimpleComponent for UpdatePageModel {
                             gtk::Label {
                                 set_halign: gtk::Align::Start,
                                 add_css_class: "title-4",
-                                set_label: match model.usertype {
-                                    UserPkgs::Env => "User (nix-env)",
-                                    UserPkgs::Profile => "User (nix profile)",
-                                }
-                            },
+                                set_label: "User (nix profile)"
                             gtk::Button {
                                 add_css_class: "suggested-action",
                                 set_halign: gtk::Align::End,
@@ -137,40 +130,6 @@ impl SimpleComponent for UpdatePageModel {
                             },
                             #[watch]
                             set_visible: !model.updateuserlist.is_empty(),
-                        },
-                        gtk::Box {
-                            set_orientation: gtk::Orientation::Horizontal,
-                            set_hexpand: true,
-                            #[watch]
-                            set_visible: !model.updatesystemlist.is_empty(),
-                            gtk::Label {
-                                set_halign: gtk::Align::Start,
-                                add_css_class: "title-4",
-                                set_label: "System (configuration.nix)",
-                            },
-                            gtk::Button {
-                                add_css_class: "suggested-action",
-                                set_halign: gtk::Align::End,
-                                set_hexpand: true,
-                                set_valign: gtk::Align::Center,
-                                set_label: "Update",
-                                connect_clicked[sender] => move |_|{
-                                    sender.input(UpdatePageMsg::UpdateSystem);
-                                },
-                            }
-                        },
-                        #[local_ref]
-                        updatesystemlist -> gtk::ListBox {
-                            set_valign: gtk::Align::Start,
-                            add_css_class: "boxed-list",
-                            set_selection_mode: gtk::SelectionMode::None,
-                            connect_row_activated[sender] => move |listbox, row| {
-                                if let Some(i) = listbox.index_of_child(row) {
-                                    sender.input(UpdatePageMsg::OpenRow(i as usize, InstallType::System));
-                                }
-                            },
-                            #[watch]
-                            set_visible: !model.updatesystemlist.is_empty(),
                         }
                     }
                 } else {
@@ -253,29 +212,6 @@ impl SimpleComponent for UpdatePageModel {
                     // System operations no longer supported
                 }
             },
-                            nix_data::cache::channel::unavailablepkgs(&[&systemconfig.unwrap()]).await.unwrap_or_default()
-                        }
-                        SystemPkgs::Flake => {
-                            nix_data::cache::flakes::unavailablepkgs(&[&systemconfig.unwrap()]).await.unwrap_or_default()
-                        }
-                        _ => HashMap::new(),
-                    };
-                    if uninstallsys.is_empty() {
-                        workersender.send(UpdateAsyncHandlerMsg::UpdateSystem);
-                    } else {
-                        warn!("Uninstalling unavailable packages: {:?}", uninstallsys);
-                        output.send(AppMsg::GetUnavailableItems(HashMap::new(), uninstallsys, UpdateType::System));
-                    }
-                });
-            }
-            UpdatePageMsg::UpdateSystemRm(pkgs) => {
-                info!("UpdatePageMsg::UpdateSystemRm({:?})", pkgs);
-                self.updateworker.emit(UpdateAsyncHandlerMsg::UpdateSystemRemove(pkgs));
-            }
-            UpdatePageMsg::UpdateUser(pkg) => {
-                info!("UPDATE USER PKG: {}", pkg);
-                warn!("unimplemented");
-            }
             UpdatePageMsg::UpdateAllUser => {
                 let online = util::checkonline();
                 if !online {
@@ -283,77 +219,28 @@ impl SimpleComponent for UpdatePageModel {
                     self.online = false;
                     return;
                 }
-                REBUILD_BROKER.send(RebuildMsg::Show);
-                if self.usertype == UserPkgs::Profile {
-                    let workersender = self.updateworker.sender().clone();
-                    let output = sender.output_sender().clone();
-                    relm4::spawn(async move {
-                        let uninstalluser = nix_data::cache::profile::unavailablepkgs().await.unwrap_or_default();
-                        if uninstalluser.is_empty() {
-                            workersender.send(UpdateAsyncHandlerMsg::UpdateUserPkgs);
-                        } else {
-                            warn!("Uninstalling unavailable packages: {:?}", uninstalluser);
-                            output.send(AppMsg::GetUnavailableItems(uninstalluser, HashMap::new(), UpdateType::User));
-                        }
-                    });
-    
-                } else {
-                    self.updateworker.emit(UpdateAsyncHandlerMsg::UpdateUserPkgs);
-                }
+                let workersender = self.updateworker.sender().clone();
+                let output = sender.output_sender().clone();
+                relm4::spawn(async move {
+                    let uninstalluser = nix_data::cache::profile::unavailablepkgs().await.unwrap_or_default();
+                    if uninstalluser.is_empty() {
+                        workersender.send(UpdateAsyncHandlerMsg::UpdateUserPkgs);
+                    } else {
+                        warn!("Uninstalling unavailable packages: {:?}", uninstalluser);
+                        output.send(AppMsg::GetUnavailableItems(uninstalluser, HashMap::new(), UpdateType::User));
+                    }
+                });
             }
             UpdatePageMsg::UpdateAllUserRm(pkgs) => {
                 info!("UpdatePageMsg::UpdateAllUserRm({:?})", pkgs);
                 self.updateworker.emit(UpdateAsyncHandlerMsg::UpdateUserPkgsRemove(pkgs));
             }
-            UpdatePageMsg::UpdateAll => {
-                let online = util::checkonline();
-                if !online {
-                    sender.output(AppMsg::CheckNetwork);
-                    self.online = false;
-                    return;
-                }
-                info!("UpdatePageMsg::UpdateAll");
-                let systype = self.systype.clone();
-                let usertype = self.usertype.clone();
-                let systemconfig = self.config.systemconfig.clone();
-                let workersender = self.updateworker.sender().clone();
-                let output = sender.output_sender().clone();
-                REBUILD_BROKER.send(RebuildMsg::Show);
-                relm4::spawn(async move {
-                    let uninstallsys = match systype {
-                        SystemPkgs::Legacy => {
-                            nix_data::cache::channel::unavailablepkgs(&[&systemconfig.unwrap()]).await.unwrap_or_default()
-                        }
-                        SystemPkgs::Flake => {
-                            nix_data::cache::flakes::unavailablepkgs(&[&systemconfig.unwrap()]).await.unwrap_or_default()
-                        }
-                        _ => HashMap::new(),
-                    };
-                    let uninstalluser = if usertype == UserPkgs::Profile {
-                        nix_data::cache::profile::unavailablepkgs().await.unwrap_or_default()
-                    } else {
-                        HashMap::new()
-                    };
-                    if uninstallsys.is_empty() && uninstalluser.is_empty() {
-                        workersender.send(UpdateAsyncHandlerMsg::UpdateAll);
-                    } else {
-                        warn!("Uninstalling unavailable user packages: {:?}", uninstalluser);
-                        warn!("Uninstalling unavailable system packages: {:?}", uninstallsys);
-                        output.send(AppMsg::GetUnavailableItems(uninstalluser, uninstallsys, UpdateType::All));
-                    }
-                });
-            }
-            UpdatePageMsg::UpdateAllRm(userpkgs, syspkgs) => {
-                info!("UpdatePageMsg::UpdateAllRm({:?}, {:?})", userpkgs, syspkgs);
-                self.updateworker.emit(UpdateAsyncHandlerMsg::UpdateAllRemove(userpkgs, syspkgs));
-            }
             UpdatePageMsg::DoneWorking => {
                 let _ = nix_data::utils::refreshicons();
-                REBUILD_BROKER.send(RebuildMsg::FinishSuccess);
                 sender.output(AppMsg::UpdateInstalledPkgs);
             }
             UpdatePageMsg::FailedWorking => {
-                REBUILD_BROKER.send(RebuildMsg::FinishError(None));
+                // Update failed
             }
             UpdatePageMsg::UpdateOnline(online) => {
                 self.set_online(online);
